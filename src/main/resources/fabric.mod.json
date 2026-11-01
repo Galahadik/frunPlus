@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "friendrun",
+  "version": "${version}",
+  "name": "FRun",
+  "description": "Random item race with friends: lobby by name, /go, first to find the item wins.",
+  "authors": ["you"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": { "client": ["dev.friendrun.FriendRunClient"] },
+  "mixins": ["friendrun.mixins.json"],
+  "suggests": { "e4mc_minecraft": "*" },
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "fabric-api": "*",
+    "minecraft": "26.3",
+    "java": ">=25"
+  }
+}
