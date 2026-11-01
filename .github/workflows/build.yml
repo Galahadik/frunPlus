@@ -1,0 +1,66 @@
+name: Build mod
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: current
+      - name: Unpack zip if the project was uploaded as friendrun.zip
+        run: |
+          if [ -f friendrun.zip ]; then
+            if unzip -tq friendrun.zip > /dev/null 2>&1; then
+              rm -rf friendrun
+              unzip -o -q friendrun.zip
+            else
+              echo "::error::friendrun.zip повреждён (загрузился не полностью). Скачайте архив заново и загрузите ещё раз. Размер должен быть $(stat -c%s friendrun.zip) байт сейчас — это неверно."
+              exit 1
+            fi
+          fi
+      - name: Build
+        id: build
+        run: |
+          if [ -d friendrun ]; then cd friendrun; fi
+          gradle build --no-daemon 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+          test ${PIPESTATUS[0]} -eq 0
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          cp build/libs/*.jar "$GITHUB_WORKSPACE/out/"
+      - name: Dump Minecraft API signatures (only on failure)
+        if: failure()
+        run: |
+          JAR=$(find ~/.gradle "$GITHUB_WORKSPACE" -name "*.jar" -size +5M 2>/dev/null | grep -i minecraft | grep -vi "sources\|natives" | head -3)
+          echo "Minecraft jars: $JAR"
+          {
+            for J in $JAR; do
+              for C in net.minecraft.client.gui.GuiGraphicsExtractor net.minecraft.client.gui.components.EditBox \
+                       net.minecraft.client.server.IntegratedServer net.minecraft.client.gui.screens.worldselection.WorldOpenFlows \
+                       net.minecraft.client.gui.screens.ConnectScreen net.minecraft.world.level.LevelSettings \
+                       net.minecraft.world.level.levelgen.WorldOptions net.minecraft.client.gui.components.ChatComponent \
+                       net.minecraft.client.player.LocalPlayer net.minecraft.client.Minecraft; do
+                javap -cp "$J" -public "$C" 2>/dev/null || true
+              done
+            done
+          } > "$GITHUB_WORKSPACE/api-dump.txt"
+          grep -E "item|text|publishServer|createFreshLevel|startConnecting|LevelSettings\(|WorldOptions\(|setHint|displayClientMessage|getUser|createWorldOpenFlows|getSingleplayerServer|addMessage" "$GITHUB_WORKSPACE/api-dump.txt" | head -80 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: logs
+          path: |
+            build.log
+            api-dump.txt
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: friendrun-mod
+          path: out/*.jar
